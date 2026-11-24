@@ -197,6 +197,8 @@ function catOptions(selected) {
           <optgroup label="Wants">${list.filter((c) => c.grp === 'wants').map(opt).join('')}</optgroup>`;
 }
 
+const sel = (opts, cur) => opts.map(([v, l]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${l}</option>`).join('');
+
 function defaultAccount(cat) {
   if (!cat) return 'household';
   if (cat.kind === 'fund' && !/guilt/i.test(cat.name)) return 'set_aside';
@@ -279,12 +281,20 @@ function viewSettings() {
       <button class="primary">Save</button>
     </form>
     <h2>Categories and monthly budgets</h2>
-    <div class="card"><div class="muted">Changes save as you leave each box. Untick to hide a category.</div>
-      <table>${S.cats.map((c) => `<tr>
-        <td><input data-cat="${c.id}" data-field="name" value="${esc(c.name)}" aria-label="Name"></td>
-        <td style="width:104px"><input data-cat="${c.id}" data-field="monthly_budget" type="number" min="0" step="any" value="${Number(c.monthly_budget)}" aria-label="Monthly budget"></td>
-        <td style="width:30px"><input data-cat="${c.id}" data-field="active" type="checkbox" ${c.active ? 'checked' : ''} aria-label="Active"></td>
-      </tr>`).join('')}</table>
+    <div class="card"><div class="muted">Changes save as you leave each box. Untick Active to hide a category without losing its history.</div>
+      ${S.cats.map((c) => `<div class="cat">
+        <input data-cat="${c.id}" data-field="name" value="${esc(c.name)}" aria-label="Name">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">
+          <input data-cat="${c.id}" data-field="monthly_budget" type="number" min="0" step="any" value="${Number(c.monthly_budget)}" aria-label="Monthly budget">
+          <select data-cat="${c.id}" data-field="grp" aria-label="Group">${sel([['needs', 'Needs'], ['wants', 'Wants']], c.grp)}</select>
+          <select data-cat="${c.id}" data-field="kind" aria-label="Type">${sel([['monthly', 'Monthly'], ['fund', 'Fund']], c.kind)}</select>
+        </div>
+        <div class="row" style="margin-top:8px;align-items:center">
+          <label style="margin:0"><input data-cat="${c.id}" data-field="is_fixed" type="checkbox" style="width:auto" ${c.is_fixed ? 'checked' : ''}> Fixed bill</label>
+          <label style="margin:0"><input data-cat="${c.id}" data-field="active" type="checkbox" style="width:auto" ${c.active ? 'checked' : ''}> Active</label>
+          <button class="link del" data-action="delcat" data-id="${c.id}">Delete</button>
+        </div>
+      </div>`).join('')}
     </div>
     <h2>New category</h2>
     <form id="newcat" class="card">
@@ -366,6 +376,15 @@ document.addEventListener('click', (ev) => {
     link.click();
     URL.revokeObjectURL(link.href);
   }
+  else if (a === 'delcat') {
+    const c = catById(Number(el.dataset.id));
+    if (c && confirm(`Delete the category "${c.name}"? This cannot be undone.`)) {
+      run(async () => {
+        const { error } = await sb.from('categories').delete().eq('id', c.id);
+        if (error) throw new Error(error.code === '23503' ? 'This category has expenses. Untick Active to hide it instead.' : error.message);
+      }, 'Category deleted');
+    }
+  }
   else if (a === 'signout') { sb.auth.signOut(); }
 });
 
@@ -383,7 +402,7 @@ document.addEventListener('change', (ev) => {
   }
   if (el.dataset.cat) {
     const field = el.dataset.field;
-    const value = field === 'active' ? el.checked : field === 'monthly_budget' ? Number(el.value) : el.value.trim();
+    const value = (field === 'active' || field === 'is_fixed') ? el.checked : field === 'monthly_budget' ? Number(el.value) : el.value.trim();
     if (field === 'name' && !value) { toast('Name cannot be empty'); render(); return; }
     if (field === 'monthly_budget' && !(value >= 0)) { toast('Budget must be 0 or more'); render(); return; }
     run(async () => {
