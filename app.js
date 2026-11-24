@@ -16,7 +16,7 @@ const ACCOUNTS = { household: 'Household account', set_aside: 'Set-aside account
 
 const S = {
   user: null, profiles: [], settings: null, cats: [], exps: [],
-  month: ymOf(new Date()), tab: 'home', editing: null, sheet: null, presetCat: null, filter: { cat: '', who: '' }, error: '', busy: false,
+  month: ymOf(new Date()), tab: 'home', editing: null, sheet: null, fixed: false, presetCat: null, filter: { cat: '', who: '' }, error: '', busy: false,
 };
 
 // ---------- date helpers ----------
@@ -99,8 +99,8 @@ function render() {
       ${[['home', '◔', 'Overview'], ['history', '≡', 'History'], ['settings', '⚙', 'Settings']]
         .map(([k, icon, label]) => `<button data-action="tab" data-tab="${k}" class="${S.tab === k ? 'on' : ''}"><span>${icon}</span>${label}</button>`).join('')}
     </div></nav>
-    ${S.tab === 'add' || S.sheet ? '' : '<button class="fab" data-action="tab" data-tab="add" aria-label="Add expense">＋</button>'}
-    ${S.sheet ? viewSheet() : ''}`;
+    ${S.tab === 'add' || S.sheet || S.fixed ? '' : '<button class="fab" data-action="tab" data-tab="add" aria-label="Add expense">＋</button>'}
+    ${S.sheet ? viewSheet() : S.fixed ? viewFixed() : ''}`;
   const af = $app.querySelector('[data-autofocus]');
   if (af) af.focus();
 }
@@ -178,7 +178,7 @@ function viewHome() {
         ${counted > cap ? `<span class="neg">${fmt(counted - cap)} over</span>` : `${fmt(cap - counted)} under`}</div>
     </div>
     ${pending.length ? `<div class="card"><div class="row"><span>${pending.length} fixed bill${pending.length === 1 ? '' : 's'} not logged yet</span>
-      <button class="ghost" data-action="logfixed">Log them</button></div>
+      <button class="ghost" data-action="logfixed">Choose</button></div>
       <div class="muted">${pending.map((c) => esc(c.name)).join(', ')}</div></div>` : ''}
     <div class="hint">Tap any category to add a spend</div>
     ${funds.length ? `<h2>Funds that build up</h2><div class="card">${funds.map((c) => {
@@ -240,6 +240,21 @@ function viewAdd() {
       <label>Note (optional)</label><input name="note" maxlength="200" value="${e ? esc(e.note || '') : ''}">
       <button class="primary">${e ? 'Save changes' : 'Add expense'}</button>
       ${e ? '<button type="button" class="ghost" style="width:100%;margin-top:8px" data-action="canceledit">Cancel</button>' : ''}
+    </form>`;
+}
+
+const pendingFixed = () => S.cats.filter((c) => c.active && c.is_fixed && c.kind === 'monthly'
+  && Number(c.monthly_budget) > 0 && spentIn(c.id, S.month) === 0);
+
+function viewFixed() {
+  return `<div class="backdrop" data-action="closesheet"></div>
+    <form id="fixed" class="sheet">
+      <div class="grab"></div>
+      <div class="row"><strong class="sheet-title">Log fixed bills</strong><button type="button" class="link" data-action="closesheet">Close</button></div>
+      <div class="muted">Untick any you have not paid yet for ${esc(monthLabel(S.month))}.</div>
+      ${pendingFixed().map((c) => `<label style="display:flex;align-items:center;gap:12px;margin:0;padding:13px 0;border-bottom:1px solid var(--line);font-size:16px;color:var(--ink)">
+        <input type="checkbox" name="c${c.id}" checked><span style="flex:1;min-width:0">${esc(c.name)}</span><strong>${fmt(c.monthly_budget)}</strong></label>`).join('')}
+      <button class="primary">Log selected</button>
     </form>`;
 }
 
@@ -362,7 +377,7 @@ document.addEventListener('click', (ev) => {
   const a = el.dataset.action;
   if (a === 'tab') { S.tab = el.dataset.tab; S.sheet = null; S.presetCat = null; if (S.tab !== 'add') S.editing = null; render(); }
   else if (a === 'quick') { S.sheet = Number(el.dataset.id); render(); }
-  else if (a === 'closesheet') { S.sheet = null; render(); }
+  else if (a === 'closesheet') { S.sheet = null; S.fixed = false; render(); }
   else if (a === 'amt') { const inp = document.querySelector('#quick [name=amount]'); inp.value = (Number(inp.value) || 0) + Number(el.dataset.n); inp.focus(); }
   else if (a === 'moreopts') { S.presetCat = S.sheet; S.sheet = null; S.tab = 'add'; render(); }
   else if (a === 'month') { S.month = shiftMonth(S.month, Number(el.dataset.by)); render(); }
@@ -379,21 +394,7 @@ document.addEventListener('click', (ev) => {
       run(async () => { const { error } = await sb.from('expenses').delete().eq('id', e.id); if (error) throw error; }, 'Deleted');
     }
   }
-  else if (a === 'logfixed') {
-    const pending = S.cats.filter((c) => c.active && c.is_fixed && c.kind === 'monthly'
-      && Number(c.monthly_budget) > 0 && spentIn(c.id, S.month) === 0);
-    const list = pending.map((c) => `${c.name}: ${fmt(c.monthly_budget)}`).join('\n');
-    if (pending.length && confirm(`Log these for ${monthLabel(S.month)}?\n\n${list}`)) {
-      const date = S.month === ymOf(new Date()) ? today() : `${S.month}-01`;
-      run(async () => {
-        const { error } = await sb.from('expenses').insert(pending.map((c) => ({
-          spent_on: date, amount: Number(c.monthly_budget), category_id: c.id,
-          paid_by: S.user.id, account: defaultAccount(c), note: 'Fixed bill',
-        })));
-        if (error) throw error;
-      }, 'Fixed bills logged');
-    }
-  }
+  else if (a === 'logfixed') { S.fixed = true; render(); }
   else if (a === 'csv') {
     const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const lines = [['Date', 'Category', 'Amount', 'Paid by', 'Paid from', 'Note'].join(',')].concat(
@@ -486,6 +487,19 @@ document.addEventListener('submit', (ev) => {
       S.sheet = null;
       S.month = ymOf(new Date());
     }, `Added ${fmt(amount)} to ${c.name}`);
+  }
+  else if (form.id === 'fixed') {
+    const picked = pendingFixed().filter((c) => f[`c${c.id}`] === 'on');
+    if (!picked.length) { toast('Tick at least one bill'); return; }
+    const date = S.month === ymOf(new Date()) ? today() : `${S.month}-01`;
+    run(async () => {
+      const { error } = await sb.from('expenses').insert(picked.map((c) => ({
+        spent_on: date, amount: Number(c.monthly_budget), category_id: c.id,
+        paid_by: S.user.id, account: defaultAccount(c), note: 'Fixed bill',
+      })));
+      if (error) throw error;
+      S.fixed = false;
+    }, `Logged ${picked.length} bill${picked.length === 1 ? '' : 's'}`);
   }
   else if (form.id === 'settings') {
     run(async () => {
