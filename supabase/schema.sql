@@ -70,6 +70,7 @@ create policy "members update settings" on public.settings for update to authent
 create policy "members read categories"   on public.categories for select to authenticated using (true);
 create policy "members insert categories" on public.categories for insert to authenticated with check (true);
 create policy "members update categories" on public.categories for update to authenticated using (true) with check (true);
+create policy "members delete categories" on public.categories for delete to authenticated using (true);
 
 create policy "members read expenses"   on public.expenses for select to authenticated using (true);
 create policy "members insert expenses" on public.expenses for insert to authenticated with check (true);
