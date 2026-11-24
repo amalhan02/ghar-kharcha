@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14342b">
+<title>Ghar Kharcha</title>
+<style>
+  :root {
+    --ink: #14342b; --ink-soft: #4d655d; --paper: #f6f3ec; --card: #ffffff; --line: #e3ddd0;
+    --accent: #1f7a5c; --warn: #c9861a; --bad: #b83a2e; --chip: #ece7da;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { padding-bottom: 84px; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 0 16px; }
+  header { background: var(--ink); color: #fff; padding: 14px 0 12px; position: sticky; top: 0; z-index: 5; }
+  header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: .2px; }
+  .month { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+  .month button { background: rgba(255,255,255,.14); color: #fff; border: 0; border-radius: 8px; width: 34px; height: 34px; font-size: 18px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--ink-soft); margin: 22px 0 8px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin: 10px 0; }
+  .big { font-size: 30px; font-weight: 700; letter-spacing: -.5px; }
+  .muted { color: var(--ink-soft); font-size: 13px; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .bar { height: 8px; background: var(--chip); border-radius: 99px; overflow: hidden; margin: 6px 0 2px; position: relative; }
+  .bar > i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+  .bar.warn > i { background: var(--warn); } .bar.bad > i { background: var(--bad); }
+  .bar > b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+  .cat { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .cat:last-child { border-bottom: 0; }
+  .neg { color: var(--bad); font-weight: 600; } .pos { color: var(--accent); font-weight: 600; }
+  label { display: block; font-size: 13px; color: var(--ink-soft); margin: 12px 0 4px; }
+  input, select, textarea { width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 10px;
+    font: inherit; background: #fff; color: var(--ink); }
+  input.amount { font-size: 30px; font-weight: 700; text-align: center; }
+  button.primary { width: 100%; margin-top: 16px; padding: 14px; border: 0; border-radius: 12px;
+    background: var(--accent); color: #fff; font: inherit; font-weight: 700; }
+  button.ghost { padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font: inherit; color: var(--ink); }
+  button.link { border: 0; background: none; color: var(--accent); font: inherit; padding: 4px 6px; }
+  button.link.del { color: var(--bad); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { border: 1px solid var(--line); background: #fff; border-radius: 99px; padding: 7px 12px; font: inherit; font-size: 14px; color: var(--ink); }
+  .chips button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  nav { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom); z-index: 6; }
+  nav .wrap { display: grid; grid-template-columns: repeat(4, 1fr); padding: 0; }
+  nav button { border: 0; background: none; padding: 12px 4px 10px; font: inherit; font-size: 12px; color: var(--ink-soft); }
+  nav button.on { color: var(--accent); font-weight: 700; }
+  nav button span { display: block; font-size: 20px; line-height: 1.1; }
+  .exp { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .exp:last-child { border-bottom: 0; }
+  .toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); background: var(--ink); color: #fff;
+    padding: 10px 16px; border-radius: 99px; font-size: 14px; z-index: 9; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td { padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  td input { padding: 8px; } td input[type=checkbox] { width: auto; }
+  .err { color: var(--bad); font-size: 14px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
