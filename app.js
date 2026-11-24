@@ -16,7 +16,7 @@ const ACCOUNTS = { household: 'Household account', set_aside: 'Set-aside account
 
 const S = {
   user: null, profiles: [], settings: null, cats: [], exps: [],
-  month: ymOf(new Date()), tab: 'home', editing: null, filter: { cat: '', who: '' }, error: '', busy: false,
+  month: ymOf(new Date()), tab: 'home', editing: null, sheet: null, presetCat: null, filter: { cat: '', who: '' }, error: '', busy: false,
 };
 
 // ---------- date helpers ----------
@@ -96,9 +96,13 @@ function render() {
     </div></header>
     <main class="wrap">${tabs[S.tab]()}</main>
     <nav><div class="wrap">
-      ${[['home', '◔', 'Overview'], ['add', '＋', 'Add'], ['history', '≡', 'History'], ['settings', '⚙', 'Settings']]
+      ${[['home', '◔', 'Overview'], ['history', '≡', 'History'], ['settings', '⚙', 'Settings']]
         .map(([k, icon, label]) => `<button data-action="tab" data-tab="${k}" class="${S.tab === k ? 'on' : ''}"><span>${icon}</span>${label}</button>`).join('')}
-    </div></nav>`;
+    </div></nav>
+    ${S.tab === 'add' || S.sheet ? '' : '<button class="fab" data-action="tab" data-tab="add" aria-label="Add expense">＋</button>'}
+    ${S.sheet ? viewSheet() : ''}`;
+  const af = $app.querySelector('[data-autofocus]');
+  if (af) af.focus();
 }
 
 function viewLogin() {
@@ -150,9 +154,9 @@ function viewHome() {
     if (!rows.length) return '';
     return `<h2>${title}</h2><div class="card">${rows.map((c) => {
       const spent = spentIn(c.id, ym); const budget = Number(c.monthly_budget); const rem = budget - spent;
-      return `<div class="cat"><div class="row"><span>${esc(c.name)}</span>
+      return `<div class="cat tap" data-action="quick" data-id="${c.id}"><div class="catmain"><div class="row"><span>${esc(c.name)}</span>
         <span class="muted">${fmt(spent)} / ${fmt(budget)}</span></div>${barHtml(spent, budget)}
-        <div class="muted ${rem < 0 ? 'neg' : ''}">${rem < 0 ? `${fmt(-rem)} over` : `${fmt(rem)} left`}</div></div>`;
+        <div class="muted ${rem < 0 ? 'neg' : ''}">${rem < 0 ? `${fmt(-rem)} over` : `${fmt(rem)} left`}</div></div><span class="plus" aria-hidden="true">＋</span></div>`;
     }).join('')}</div>`;
   };
 
@@ -160,7 +164,7 @@ function viewHome() {
   S.exps.forEach((e) => { if (e.spent_on.slice(0, 7) === ym) byPerson[e.paid_by] = (byPerson[e.paid_by] || 0) + e.amount; });
 
   return `
-    <div class="card">
+    <div class="card hero">
       <div class="muted">Left for day-to-day spending in ${esc(monthLabel(ym))}</div>
       <div class="big ${left < 0 ? 'neg' : ''}">${fmt(left)}</div>
       <div class="muted">Spent ${fmt(monthlySpent)} of ${fmt(monthlyBudget)}${
@@ -176,13 +180,14 @@ function viewHome() {
     ${pending.length ? `<div class="card"><div class="row"><span>${pending.length} fixed bill${pending.length === 1 ? '' : 's'} not logged yet</span>
       <button class="ghost" data-action="logfixed">Log them</button></div>
       <div class="muted">${pending.map((c) => esc(c.name)).join(', ')}</div></div>` : ''}
+    <div class="hint">Tap any category to add a spend</div>
     ${funds.length ? `<h2>Funds that build up</h2><div class="card">${funds.map((c) => {
       const budget = Number(c.monthly_budget);
       const balance = monthsInclusive(startYm(), ym) * budget - spentThrough(c.id, ym);
       const used = spentIn(c.id, ym);
-      return `<div class="cat"><div class="row"><span>${esc(c.name)}</span>
+      return `<div class="cat tap" data-action="quick" data-id="${c.id}"><div class="catmain"><div class="row"><span>${esc(c.name)}</span>
         <span class="${balance < 0 ? 'neg' : 'pos'}">${fmt(balance)}</span></div>
-        <div class="muted">+${fmt(budget)} a month${used ? ` · ${fmt(used)} used this month` : ''}</div></div>`;
+        <div class="muted">+${fmt(budget)} a month${used ? ` · ${fmt(used)} used this month` : ''}</div></div><span class="plus" aria-hidden="true">＋</span></div>`;
     }).join('')}</div>` : ''}
     ${group('needs', 'Needs')}
     ${group('wants', 'Wants')}
@@ -212,7 +217,7 @@ function viewAdd() {
   S.exps.forEach((x) => { counts[x.category_id] = (counts[x.category_id] || 0) + 1; });
   const quick = S.cats.filter((c) => c.active && !c.is_fixed)
     .sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0) || a.sort - b.sort).slice(0, 6);
-  const selCat = e ? e.category_id : (quick[0] || S.cats[0] || {}).id;
+  const selCat = e ? e.category_id : S.presetCat || (quick[0] || S.cats[0] || {}).id;
   const cat = catById(selCat);
   const acct = e ? e.account : defaultAccount(cat);
   const rem = cat && cat.kind === 'monthly' ? Number(cat.monthly_budget) - spentIn(cat.id, S.month) : null;
@@ -235,6 +240,26 @@ function viewAdd() {
       <label>Note (optional)</label><input name="note" maxlength="200" value="${e ? esc(e.note || '') : ''}">
       <button class="primary">${e ? 'Save changes' : 'Add expense'}</button>
       ${e ? '<button type="button" class="ghost" style="width:100%;margin-top:8px" data-action="canceledit">Cancel</button>' : ''}
+    </form>`;
+}
+
+function viewSheet() {
+  const c = catById(S.sheet);
+  if (!c) return '';
+  const rem = Number(c.monthly_budget) - spentIn(c.id, S.month);
+  const info = c.kind === 'fund'
+    ? `Fund balance ${fmt(monthsInclusive(startYm(), S.month) * Number(c.monthly_budget) - spentThrough(c.id, S.month))}`
+    : rem < 0 ? `${fmt(-rem)} over budget this month` : `${fmt(rem)} left of ${fmt(c.monthly_budget)} this month`;
+  return `<div class="backdrop" data-action="closesheet"></div>
+    <form id="quick" class="sheet">
+      <div class="grab"></div>
+      <div class="row"><strong class="sheet-title">${esc(c.name)}</strong><button type="button" class="link" data-action="closesheet">Close</button></div>
+      <div class="muted">${info}</div>
+      <input class="amount" name="amount" type="number" inputmode="decimal" min="1" step="any" required placeholder="₹0" aria-label="Amount" data-autofocus>
+      <div class="chips">${[100, 200, 500, 1000, 2000].map((n) => `<button type="button" data-action="amt" data-n="${n}">+${n}</button>`).join('')}</div>
+      <input name="note" maxlength="200" placeholder="Note (optional)" aria-label="Note" style="margin-top:12px">
+      <button class="primary">Add spend</button>
+      <button type="button" class="link" style="width:100%;margin-top:6px" data-action="moreopts">More options: date, paid by, account</button>
     </form>`;
 }
 
@@ -335,7 +360,11 @@ document.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-action]');
   if (!el) return;
   const a = el.dataset.action;
-  if (a === 'tab') { S.tab = el.dataset.tab; if (S.tab !== 'add') S.editing = null; render(); }
+  if (a === 'tab') { S.tab = el.dataset.tab; S.sheet = null; S.presetCat = null; if (S.tab !== 'add') S.editing = null; render(); }
+  else if (a === 'quick') { S.sheet = Number(el.dataset.id); render(); }
+  else if (a === 'closesheet') { S.sheet = null; render(); }
+  else if (a === 'amt') { const inp = document.querySelector('#quick [name=amount]'); inp.value = (Number(inp.value) || 0) + Number(el.dataset.n); inp.focus(); }
+  else if (a === 'moreopts') { S.presetCat = S.sheet; S.sheet = null; S.tab = 'add'; render(); }
   else if (a === 'month') { S.month = shiftMonth(S.month, Number(el.dataset.by)); render(); }
   else if (a === 'pickcat') {
     const form = document.getElementById('expense');
@@ -444,6 +473,19 @@ document.addEventListener('submit', (ev) => {
       S.month = row.spent_on.slice(0, 7);
       if (editing) S.tab = 'history';
     }, editing ? 'Updated' : `Added ${fmt(amount)}`);
+  }
+  else if (form.id === 'quick') {
+    const amount = Number(f.amount);
+    const c = catById(S.sheet);
+    if (!c) return;
+    if (!(amount > 0)) { toast('Enter an amount'); return; }
+    run(async () => {
+      const { error } = await sb.from('expenses').insert({ amount, category_id: c.id, spent_on: today(), paid_by: S.user.id,
+        account: defaultAccount(c), note: (f.note || '').trim() || null });
+      if (error) throw error;
+      S.sheet = null;
+      S.month = ymOf(new Date());
+    }, `Added ${fmt(amount)} to ${c.name}`);
   }
   else if (form.id === 'settings') {
     run(async () => {
